@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Das vergessene Königreich – Bildschirmablauf</title>
+<style>
+  :root {
+    --bg: #F4F2EE; --panel: #FFFFFF; --ink: #1D1D1F; --muted: #6A6A6E; --line: #E1DDD5;
+    --accent: #2F6FEB; --term: #0C0C0C; --term-ink: #D6D6D6; --in: #F9F1A5; --ok: #6EE7A0;
+    --mono: Consolas, "Cascadia Mono", "Cascadia Code", "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+
+  header { display: flex; align-items: center; gap: 18px; padding: 14px 22px; background: var(--panel);
+    border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: clamp(17px, 1.6vw, 24px); font-weight: 700; letter-spacing: .1px; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: clamp(12px, 1vw, 15px); }
+  .spacer { flex: 1; }
+  .btn { font: inherit; font-size: 14px; border: 1px solid var(--line); background: #FAF9F7; color: var(--ink);
+    border-radius: 9px; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: #EFEBE4; }
+  .btn.primary { background: #1D1D1F; color: #fff; border-color: #1D1D1F; }
+  .btn.primary:hover { background: #333; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  main { position: relative; overflow: hidden; }
+  #map { width: 100%; height: 100%; display: block; padding: 10px 14px 64px; }
+  #map g.node { cursor: pointer; transition: opacity .25s; }
+  #map g.node:hover path, #map g.node:hover polygon { filter: brightness(.96); stroke-width: 3.2; }
+  #map g.node.current path, #map g.node.current polygon { stroke: var(--accent); stroke-width: 4.5; }
+  #map g.edge { transition: opacity .25s; }
+  body.open #map g.edge:not(.out) { opacity: .22; }
+  body.open #map g.edge.out path { stroke-width: 3.2; }
+  body.open #map g.node:not(.current):not(.target) { opacity: .55; }
+  #map #ORT { cursor: default; }
+
+  .legend { position: absolute; left: 18px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px 18px;
+    background: rgba(255,255,255,.88); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px;
+    font-size: 13px; color: var(--muted); max-width: calc(100% - 36px); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 26px; height: 0; border-top: 3px solid; display: inline-block; }
+
+  /* ---------- schwebendes Terminal ---------- */
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(30, 28, 25, .22); padding: 3vh 3vw; z-index: 10; }
+  body.open .overlay { display: flex; }
+  .win { width: min(1020px, 94vw); max-height: 94vh; display: flex; flex-direction: column; border-radius: 12px;
+    overflow: hidden; background: #1E1E1E; box-shadow: 0 30px 80px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06);
+    animation: pop .28s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes pop { from { transform: translateY(14px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #2B2B2B; color: #BDBDBD;
+    font-size: 14px; user-select: none; }
+  .dots { display: flex; gap: 7px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .bar .ttl { font-family: var(--mono); }
+  .chip { margin-left: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; color: #1D1D1F; font-weight: 600; }
+  .bar .x { margin-left: auto; background: transparent; border: 0; color: #BDBDBD; font-size: 22px; line-height: 1;
+    cursor: pointer; padding: 0 4px; border-radius: 6px; }
+  .bar .x:hover { color: #fff; background: #3A3A3A; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px 0; background: var(--term); }
+  .tab { font: inherit; font-size: 13.5px; border: 1px solid #3A3A3A; background: #161616; color: #BDBDBD;
+    border-radius: 7px; padding: 5px 12px; cursor: pointer; }
+  .tab:hover { color: #fff; border-color: #555; }
+  .tab.on { background: #E8E8E8; color: #111; border-color: #E8E8E8; font-weight: 600; }
+  .tabs .hint { margin-left: auto; color: #777; font-size: 12px; align-self: center; }
+
+  .term { margin: 0; padding: 18px 22px 22px; background: var(--term); color: var(--term-ink); overflow: auto;
+    font-family: var(--mono); font-size: clamp(14px, 1.3vw, 20px); line-height: 1.42; white-space: pre; min-height: 9em; }
+  .term .ln { opacity: 0; animation: ln .18s forwards; }
+  @keyframes ln { to { opacity: 1; } }
+  .term .in { color: var(--in); font-weight: 700; }
+  .term .ok { color: var(--ok); }
+  .term .cur { display: inline-block; width: .6em; height: 1.05em; vertical-align: -0.15em; background: var(--in);
+    animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .foot { background: #FAF9F7; padding: 12px 16px 14px; color: var(--ink); border-top: 1px solid #2B2B2B; }
+  .note { font-size: 14px; color: #4A4A4E; margin-bottom: 10px; }
+  .next { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .next b { font-size: 13px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .go { font: inherit; font-size: 14px; border: 1px solid var(--line); background: #fff; border-radius: 9px;
+    padding: 6px 12px; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+  .go:hover { border-color: var(--accent); background: #F2F6FF; }
+  .go kbd { font-family: var(--mono); font-size: 12.5px; background: #1D1D1F; color: #fff; padding: 2px 7px; border-radius: 5px; }
+  .go .to { font-weight: 600; }
+
+  @media (max-width: 760px) {
+    header { flex-wrap: wrap; } header p { display: none; }
+    .legend { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .win, .term .ln { animation: none; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Das vergessene Königreich – Bildschirmablauf</h1>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn primary" id="tour">▶ Rundgang starten</button>
+  </header>
+  <main>
+    <svg id="map" preserveAspectRatio="xMidYMid meet"
+ viewBox="0.00 0.00 2072.20 719.20" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(21.6 697.6)">
+<title>Map</title>
+<g id="clust1" class="cluster">
+<title>cluster_start</title>
+<path fill="transparent" stroke="#4c5d80" stroke-dasharray="5,2" d="M20,-8C20,-8 419,-8 419,-8 425,-8 431,-14 431,-20 431,-20 431,-245 431,-245 431,-251 425,-257 419,-257 419,-257 20,-257 20,-257 14,-257 8,-251 8,-245 8,-245 8,-20 8,-20 8,-14 14,-8 20,-8"/>
+<text text-anchor="start" x="137" y="-242" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#4c5d80">Start &amp; Hauptmenü</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_orte</title>
+<path fill="transparent" stroke="#357046" stroke-dasharray="5,2" d="M476,-325C476,-325 1246,-325 1246,-325 1252,-325 1258,-331 1258,-337 1258,-337 1258,-656 1258,-656 1258,-662 1252,-668 1246,-668 1246,-668 476,-668 476,-668 470,-668 464,-662 464,-656 464,-656 464,-337 464,-337 464,-331 470,-325 476,-325"/>
+<text text-anchor="start" x="799" y="-653" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#357046">Orte erkunden</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_kampf</title>
+<path fill="transparent" stroke="#9a4129" stroke-dasharray="5,2" d="M1449,-328C1449,-328 2009,-328 2009,-328 2015,-328 2021,-334 2021,-340 2021,-340 2021,-601 2021,-601 2021,-607 2015,-613 2009,-613 2009,-613 1449,-613 1449,-613 1443,-613 1437,-607 1437,-601 1437,-601 1437,-340 1437,-340 1437,-334 1443,-328 1449,-328"/>
+<text text-anchor="start" x="1701.5" y="-598" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#9a4129">Kampf</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_stadt</title>
+<path fill="transparent" stroke="#94700f" stroke-dasharray="5,2" d="M975,-137C975,-137 1581.5,-137 1581.5,-137 1587.5,-137 1593.5,-143 1593.5,-149 1593.5,-149 1593.5,-305 1593.5,-305 1593.5,-311 1587.5,-317 1581.5,-317 1581.5,-317 975,-317 975,-317 969,-317 963,-311 963,-305 963,-305 963,-149 963,-149 963,-143 969,-137 975,-137"/>
+<text text-anchor="start" x="1214.75" y="-302" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#94700f">Stadt Eldenruh</text>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_char</title>
+<path fill="transparent" stroke="#5e4393" stroke-dasharray="5,2" d="M502,-81C502,-81 714,-81 714,-81 720,-81 726,-87 726,-93 726,-93 726,-305 726,-305 726,-311 720,-317 714,-317 714,-317 502,-317 502,-317 496,-317 490,-311 490,-305 490,-305 490,-93 490,-93 490,-87 496,-81 502,-81"/>
+<text text-anchor="start" x="531" y="-302" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#5e4393">Inventar &amp; Quests</text>
+</g>
+
+<g id="START" class="node">
+<title>START</title>
+<path fill="#e6ecf5" stroke="#4c5d80" stroke-width="2.2" d="M401,-80C401,-80 38,-80 38,-80 32,-80 26,-74 26,-68 26,-68 26,-38 26,-38 26,-32 32,-26 38,-26 38,-26 401,-26 401,-26 407,-26 413,-32 413,-38 413,-38 413,-68 413,-68 413,-74 407,-80 401,-80"/>
+<text text-anchor="start" x="46" y="-55" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">DAS VERGESSENE KÖNIGREICH</text>
+<text text-anchor="start" x="176" y="-39.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">1 Bildschirm</text>
+</g>
+
+<g id="MENU" class="node">
+<title>MENU</title>
+<path fill="#e6ecf5" stroke="#4c5d80" stroke-width="2.2" d="M299.5,-214C299.5,-214 139.5,-214 139.5,-214 133.5,-214 127.5,-208 127.5,-202 127.5,-202 127.5,-172 127.5,-172 127.5,-166 133.5,-160 139.5,-160 139.5,-160 299.5,-160 299.5,-160 305.5,-160 311.5,-166 311.5,-172 311.5,-172 311.5,-202 311.5,-202 311.5,-208 305.5,-214 299.5,-214"/>
+<text text-anchor="start" x="147.5" y="-189" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">HAUPTMENÜ</text>
+<text text-anchor="start" x="176" y="-173.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">1 Bildschirm</text>
+</g>
+
+<g id="edge1" class="edge">
+<title>START&#45;&gt;MENU</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M219.5,-80.12C219.5,-100.46 219.5,-128.51 219.5,-150.78"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="216.35,-150.92 219.5,-159.92 222.65,-150.92 216.35,-150.92"/>
+<text text-anchor="start" x="148.5" y="-117.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">Name + Enter</text>
+</g>
+
+<g id="ORTE" class="node">
+<title>ORTE</title>
+<path fill="#e5f2e8" stroke="#357046" stroke-width="2.2" d="M722,-416.5C722,-416.5 494,-416.5 494,-416.5 488,-416.5 482,-410.5 482,-404.5 482,-404.5 482,-361.5 482,-361.5 482,-355.5 488,-349.5 494,-349.5 494,-349.5 722,-349.5 722,-349.5 728,-349.5 734,-355.5 734,-361.5 734,-361.5 734,-404.5 734,-404.5 734,-410.5 728,-416.5 722,-416.5"/>
+<text text-anchor="start" x="502" y="-391.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">WOHIN GEHST DU?</text>
+<text text-anchor="start" x="568" y="-376.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+<text text-anchor="start" x="528" y="-363.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge2" class="edge">
+<title>MENU&#45;&gt;ORTE</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M263,-214.02C310.79,-243.8 391.24,-292.08 464,-327 477.66,-333.56 492.31,-339.97 506.83,-345.96"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="505.83,-348.96 515.35,-349.45 508.21,-343.13 505.83,-348.96"/>
+<text text-anchor="start" x="442" y="-326" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">1</text>
+</g>
+
+<g id="INVENTAR" class="node">
+<title>INVENTAR</title>
+<path fill="#efe7f8" stroke="#5e4393" stroke-width="2.2" d="M696,-273.5C696,-273.5 520,-273.5 520,-273.5 514,-273.5 508,-267.5 508,-261.5 508,-261.5 508,-218.5 508,-218.5 508,-212.5 514,-206.5 520,-206.5 520,-206.5 696,-206.5 696,-206.5 702,-206.5 708,-212.5 708,-218.5 708,-218.5 708,-261.5 708,-261.5 708,-267.5 702,-273.5 696,-273.5"/>
+<text text-anchor="start" x="551" y="-248.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">INVENTAR</text>
+<text text-anchor="start" x="568" y="-233.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+<text text-anchor="start" x="528" y="-220.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge3" class="edge">
+<title>MENU&#45;&gt;INVENTAR</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M311.61,-199.49C367.65,-207.18 439.77,-217.07 498.72,-225.15"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="498.35,-228.28 507.69,-226.38 499.21,-222.04 498.35,-228.28"/>
+<text text-anchor="start" x="442" y="-224" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">2</text>
+</g>
+
+<g id="QUESTS" class="node">
+<title>QUESTS</title>
+<path fill="#efe7f8" stroke="#5e4393" stroke-width="2.2" d="M696,-166.5C696,-166.5 520,-166.5 520,-166.5 514,-166.5 508,-160.5 508,-154.5 508,-154.5 508,-111.5 508,-111.5 508,-105.5 514,-99.5 520,-99.5 520,-99.5 696,-99.5 696,-99.5 702,-99.5 708,-105.5 708,-111.5 708,-111.5 708,-154.5 708,-154.5 708,-160.5 702,-166.5 696,-166.5"/>
+<text text-anchor="start" x="563" y="-141.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">QUESTS</text>
+<text text-anchor="start" x="564.5" y="-126.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">1 Bildschirm</text>
+<text text-anchor="start" x="528" y="-113.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge4" class="edge">
+<title>MENU&#45;&gt;QUESTS</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M311.61,-174.27C367.65,-166.44 439.77,-156.36 498.72,-148.13"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="499.22,-151.24 507.69,-146.87 498.34,-145 499.22,-151.24"/>
+<text text-anchor="start" x="442" y="-161" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">3</text>
+</g>
+
+<g id="ENDE" class="node">
+<title>ENDE</title>
+<path fill="#ececec" stroke="#555555" stroke-width="2.2" d="M714.5,-59C714.5,-59 501.5,-59 501.5,-59 495.5,-59 489.5,-53 489.5,-47 489.5,-47 489.5,-17 489.5,-17 489.5,-11 495.5,-5 501.5,-5 501.5,-5 714.5,-5 714.5,-5 720.5,-5 726.5,-11 726.5,-17 726.5,-17 726.5,-47 726.5,-47 726.5,-53 720.5,-59 714.5,-59"/>
+<text text-anchor="start" x="509.5" y="-34" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">PROGRAMMENDE</text>
+<text text-anchor="start" x="581" y="-18.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">Konsole</text>
+</g>
+
+<g id="edge5" class="edge">
+<title>MENU&#45;&gt;ENDE</title>
+<path fill="none" stroke="#b03030" stroke-width="2" d="M303.26,-159.99C343.36,-145.14 391.29,-124.7 431,-100 447.58,-89.69 446.81,-80.25 464,-71 469.69,-67.94 475.63,-65.11 481.73,-62.48"/>
+<polygon fill="#b03030" stroke="#b03030" stroke-width="2" points="483.01,-65.36 490.13,-59.03 480.61,-59.54 483.01,-65.36"/>
+<text text-anchor="start" x="442" y="-96" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#b03030">4</text>
+</g>
+
+<g id="WALD" class="node">
+<title>WALD</title>
+<path fill="#e5f2e8" stroke="#357046" stroke-width="2.2" d="M1228,-410.5C1228,-410.5 934,-410.5 934,-410.5 928,-410.5 922,-404.5 922,-398.5 922,-398.5 922,-355.5 922,-355.5 922,-349.5 928,-343.5 934,-343.5 934,-343.5 1228,-343.5 1228,-343.5 1234,-343.5 1240,-349.5 1240,-355.5 1240,-355.5 1240,-398.5 1240,-398.5 1240,-404.5 1234,-410.5 1228,-410.5"/>
+<text text-anchor="start" x="942" y="-385.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">VERWUNSCHENER WALD</text>
+<text text-anchor="start" x="1041" y="-370.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+<text text-anchor="start" x="1001" y="-357.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge6" class="edge">
+<title>ORTE&#45;&gt;WALD</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M734.29,-381.4C788.87,-380.71 853.65,-379.88 912.3,-379.14"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="912.7,-382.28 921.66,-379.02 912.62,-375.98 912.7,-382.28"/>
+<text text-anchor="start" x="822.5" y="-386" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">1</text>
+</g>
+
+<g id="HOEHLE" class="node">
+<title>HOEHLE</title>
+<path fill="#e5f2e8" stroke="#357046" stroke-width="2.2" d="M1176.5,-517.5C1176.5,-517.5 985.5,-517.5 985.5,-517.5 979.5,-517.5 973.5,-511.5 973.5,-505.5 973.5,-505.5 973.5,-462.5 973.5,-462.5 973.5,-456.5 979.5,-450.5 985.5,-450.5 985.5,-450.5 1176.5,-450.5 1176.5,-450.5 1182.5,-450.5 1188.5,-456.5 1188.5,-462.5 1188.5,-462.5 1188.5,-505.5 1188.5,-505.5 1188.5,-511.5 1182.5,-517.5 1176.5,-517.5"/>
+<text text-anchor="start" x="993.5" y="-492.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">DUNKLE HÖHLE</text>
+<text text-anchor="start" x="1041" y="-477.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+<text text-anchor="start" x="1001" y="-464.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge8" class="edge">
+<title>ORTE&#45;&gt;HOEHLE</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M734.29,-409.87C805.77,-425.19 894.74,-444.27 964.52,-459.24"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="963.9,-462.33 973.36,-461.13 965.22,-456.17 963.9,-462.33"/>
+<text text-anchor="start" x="822.5" y="-448" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">3</text>
+</g>
+
+<g id="SCHLOSS" class="node">
+<title>SCHLOSS</title>
+<path fill="#e5f2e8" stroke="#357046" stroke-width="2.2" d="M1177.5,-624.5C1177.5,-624.5 984.5,-624.5 984.5,-624.5 978.5,-624.5 972.5,-618.5 972.5,-612.5 972.5,-612.5 972.5,-569.5 972.5,-569.5 972.5,-563.5 978.5,-557.5 984.5,-557.5 984.5,-557.5 1177.5,-557.5 1177.5,-557.5 1183.5,-557.5 1189.5,-563.5 1189.5,-569.5 1189.5,-569.5 1189.5,-612.5 1189.5,-612.5 1189.5,-618.5 1183.5,-624.5 1177.5,-624.5"/>
+<text text-anchor="start" x="992.5" y="-599.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">ALTES SCHLOSS</text>
+<text text-anchor="start" x="1041" y="-584.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+<text text-anchor="start" x="1001" y="-571.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge9" class="edge">
+<title>ORTE&#45;&gt;SCHLOSS</title>
+<path fill="none" stroke="#1e7b45" stroke-width="2" d="M666.04,-416.65C694.76,-433.12 730.34,-452.84 763,-469 832.05,-503.16 850.08,-510.39 922,-538 936.45,-543.55 951.76,-549.09 966.94,-554.39"/>
+<polygon fill="#1e7b45" stroke="#1e7b45" stroke-width="2" points="966.32,-557.51 975.86,-557.48 968.39,-551.56 966.32,-557.51"/>
+<text text-anchor="start" x="763" y="-532" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1e7b45">4 mit Schlüssel</text>
+</g>
+
+<g id="STADT" class="node">
+<title>STADT</title>
+<path fill="#fff2d6" stroke="#94700f" stroke-width="2.2" d="M1169,-233.5C1169,-233.5 993,-233.5 993,-233.5 987,-233.5 981,-227.5 981,-221.5 981,-221.5 981,-178.5 981,-178.5 981,-172.5 987,-166.5 993,-166.5 993,-166.5 1169,-166.5 1169,-166.5 1175,-166.5 1181,-172.5 1181,-178.5 1181,-178.5 1181,-221.5 1181,-221.5 1181,-227.5 1175,-233.5 1169,-233.5"/>
+<text text-anchor="start" x="1020" y="-208.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">ELDENRUH</text>
+<text text-anchor="start" x="1041" y="-193.3" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+<text text-anchor="start" x="1001" y="-180.1" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#888888">↩ Zurück → Hauptmenü</text>
+</g>
+
+<g id="edge7" class="edge">
+<title>ORTE&#45;&gt;STADT</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M695.39,-349.43C777.42,-317.56 900.46,-269.76 985.17,-236.84"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="986.51,-239.7 993.76,-233.51 984.23,-233.83 986.51,-239.7"/>
+<text text-anchor="start" x="822.5" y="-324" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">2</text>
+</g>
+
+<g id="KAMPF" class="node">
+<title>KAMPF</title>
+<path fill="#fbe7e1" stroke="#9a4129" stroke-width="2.2" d="M1564,-511C1564,-511 1467,-511 1467,-511 1461,-511 1455,-505 1455,-499 1455,-499 1455,-469 1455,-469 1455,-463 1461,-457 1467,-457 1467,-457 1564,-457 1564,-457 1570,-457 1576,-463 1576,-469 1576,-469 1576,-499 1576,-499 1576,-505 1570,-511 1564,-511"/>
+<text text-anchor="start" x="1475" y="-486" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">KAMPF</text>
+<text text-anchor="start" x="1475.5" y="-470.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">5 Varianten</text>
+</g>
+
+<g id="edge10" class="edge">
+<title>WALD&#45;&gt;KAMPF</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M1217.66,-410.56C1293.57,-429.34 1384.94,-451.95 1446.08,-467.07"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="1445.38,-470.15 1454.88,-469.25 1446.9,-464.03 1445.38,-470.15"/>
+<text text-anchor="start" x="1269" y="-449" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">1 + Enter</text>
+</g>
+
+<g id="ORT" class="node">
+<title>ORT</title>
+<path fill="none" stroke="#8a8a8a" stroke-dasharray="5,2" d="M1991,-382C1991,-382 1841,-382 1841,-382 1835,-382 1829,-376 1829,-370 1829,-370 1829,-358 1829,-358 1829,-352 1835,-346 1841,-346 1841,-346 1991,-346 1991,-346 1997,-346 2003,-352 2003,-358 2003,-358 2003,-370 2003,-370 2003,-376 1997,-382 1991,-382"/>
+<text text-anchor="middle" x="1916" y="-367.6" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#666666">↩ zurück zum Ort</text>
+<text text-anchor="middle" x="1916" y="-353.6" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#666666">(Wald / Höhle / Schloss)</text>
+</g>
+
+<g id="edge18" class="edge">
+<title>WALD&#45;&gt;ORT</title>
+<path fill="none" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5,2" d="M1267.17,-369.61C1385.51,-365.26 1542.26,-360.2 1681,-358 1733.88,-357.16 1747.13,-356.62 1800,-358 1809.39,-358.24 1819.21,-358.6 1828.99,-359.02"/>
+<polygon fill="#8a8a8a" stroke="#8a8a8a" stroke-width="2" points="1266.88,-366.47 1258,-369.95 1267.11,-372.77 1266.88,-366.47"/>
+<text text-anchor="start" x="1379" y="-371" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#8a8a8a">zurück zu Wald / Höhle / Schloss</text>
+</g>
+
+<g id="edge11" class="edge">
+<title>HOEHLE&#45;&gt;KAMPF</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M1188.63,-484C1268.95,-484 1376.68,-484 1445.86,-484"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="1445.94,-487.15 1454.94,-484 1445.94,-480.85 1445.94,-487.15"/>
+<text text-anchor="start" x="1269" y="-490" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">1 + Enter</text>
+</g>
+
+<g id="edge12" class="edge">
+<title>SCHLOSS&#45;&gt;KAMPF</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M1189.74,-564.34C1269.96,-544.5 1377.05,-518 1445.91,-500.97"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="1446.97,-503.95 1454.95,-498.73 1445.46,-497.84 1446.97,-503.95"/>
+<text text-anchor="start" x="1269" y="-549" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">1 + Enter</text>
+</g>
+
+<g id="edge21" class="edge">
+<title>STADT&#45;&gt;STADT</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M1041.09,-233.64C1031.85,-254.12 1045.15,-273.5 1081,-273.5 1111.53,-273.5 1125.7,-259.45 1123.53,-242.63"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="1126.46,-241.4 1120.91,-233.64 1120.41,-243.16 1126.46,-241.4"/>
+<text text-anchor="start" x="1039.5" y="-279.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">2 Taverne</text>
+</g>
+
+<g id="LADEN" class="node">
+<title>LADEN</title>
+<path fill="#fff2d6" stroke="#94700f" stroke-width="2.2" d="M1563.5,-222C1563.5,-222 1467.5,-222 1467.5,-222 1461.5,-222 1455.5,-216 1455.5,-210 1455.5,-210 1455.5,-180 1455.5,-180 1455.5,-174 1461.5,-168 1467.5,-168 1467.5,-168 1563.5,-168 1563.5,-168 1569.5,-168 1575.5,-174 1575.5,-180 1575.5,-180 1575.5,-210 1575.5,-210 1575.5,-216 1569.5,-222 1563.5,-222"/>
+<text text-anchor="start" x="1477.5" y="-197" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">LADEN</text>
+<text text-anchor="start" x="1475.5" y="-181.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">2 Varianten</text>
+</g>
+
+<g id="edge19" class="edge">
+<title>STADT&#45;&gt;LADEN</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M1181.43,-193.69C1209.72,-192.17 1240.56,-190.76 1269,-190 1304.99,-189.04 1314,-189.45 1350,-190 1381.45,-190.48 1416.27,-191.47 1445.75,-192.44"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="1446.02,-195.61 1455.12,-192.76 1446.23,-189.31 1446.02,-195.61"/>
+<text text-anchor="start" x="1304" y="-196" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">1</text>
+</g>
+
+<g id="edge20" class="edge">
+<title>LADEN&#45;&gt;STADT</title>
+<path fill="none" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5,2" d="M1455.24,-203.06C1424,-206.91 1385,-211.09 1350,-213 1297.45,-215.87 1239.1,-213.67 1190.29,-210.32"/>
+<polygon fill="#8a8a8a" stroke="#8a8a8a" stroke-width="2" points="1190.49,-207.18 1181.29,-209.69 1190.04,-213.46 1190.49,-207.18"/>
+<text text-anchor="start" x="1286" y="-220" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#8a8a8a">Enter</text>
+</g>
+
+<g id="edge13" class="edge">
+<title>KAMPF&#45;&gt;KAMPF</title>
+<path fill="none" stroke="#1f4e8c" stroke-width="2" d="M1481.23,-511.18C1469.68,-531.07 1481.1,-551 1515.5,-551 1545.06,-551 1557.66,-536.28 1553.28,-519.52"/>
+<polygon fill="#1f4e8c" stroke="#1f4e8c" stroke-width="2" points="1556.16,-518.25 1549.77,-511.18 1550.36,-520.7 1556.16,-518.25"/>
+<text text-anchor="start" x="1452.5" y="-557" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1f4e8c">nächste Runde</text>
+</g>
+
+<g id="SIEG" class="node">
+<title>SIEG</title>
+<path fill="#fbe7e1" stroke="#9a4129" stroke-width="2.2" d="M1964,-570C1964,-570 1868,-570 1868,-570 1862,-570 1856,-564 1856,-558 1856,-558 1856,-528 1856,-528 1856,-522 1862,-516 1868,-516 1868,-516 1964,-516 1964,-516 1970,-516 1976,-522 1976,-528 1976,-528 1976,-558 1976,-558 1976,-564 1970,-570 1964,-570"/>
+<text text-anchor="start" x="1885.5" y="-545" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">SIEG!</text>
+<text text-anchor="start" x="1876" y="-529.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">4 Varianten</text>
+</g>
+
+<g id="edge14" class="edge">
+<title>KAMPF&#45;&gt;SIEG</title>
+<path fill="none" stroke="#1e7b45" stroke-width="2" d="M1576.16,-492.83C1648.66,-503.57 1770.72,-521.64 1846.86,-532.91"/>
+<polygon fill="#1e7b45" stroke="#1e7b45" stroke-width="2" points="1846.54,-536.05 1855.91,-534.25 1847.47,-529.82 1846.54,-536.05"/>
+<text text-anchor="start" x="1686.5" y="-531" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#1e7b45">Gegner&#45;HP 0</text>
+</g>
+
+<g id="BESIEGT" class="node">
+<title>BESIEGT</title>
+<path fill="#fbe7e1" stroke="#9a4129" stroke-width="2.2" d="M1971,-476C1971,-476 1861,-476 1861,-476 1855,-476 1849,-470 1849,-464 1849,-464 1849,-434 1849,-434 1849,-428 1855,-422 1861,-422 1861,-422 1971,-422 1971,-422 1977,-422 1983,-428 1983,-434 1983,-434 1983,-464 1983,-464 1983,-470 1977,-476 1971,-476"/>
+<text text-anchor="start" x="1869" y="-451" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">BESIEGT</text>
+<text text-anchor="start" x="1872.5" y="-435.8" font-family="Helvetica,sans-Serif" font-size="14.00" fill="#555555">1 Bildschirm</text>
+</g>
+
+<g id="edge15" class="edge">
+<title>KAMPF&#45;&gt;BESIEGT</title>
+<path fill="none" stroke="#b03030" stroke-width="2" d="M1576.16,-478.76C1646.47,-472.58 1763.39,-462.32 1839.83,-455.6"/>
+<polygon fill="#b03030" stroke="#b03030" stroke-width="2" points="1840.26,-458.73 1848.95,-454.8 1839.71,-452.45 1840.26,-458.73"/>
+<text text-anchor="start" x="1689" y="-474" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#b03030">eigene HP 0</text>
+</g>
+
+<g id="edge16" class="edge">
+<title>KAMPF&#45;&gt;ORT</title>
+<path fill="none" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5,2" d="M1573.77,-456.94C1598.27,-444.83 1626.94,-429.93 1652,-415 1665.45,-406.99 1666.39,-400.63 1681,-395 1724.82,-378.12 1776.3,-370.14 1819.8,-366.47"/>
+<polygon fill="#8a8a8a" stroke="#8a8a8a" stroke-width="2" points="1820.23,-369.6 1828.96,-365.75 1819.74,-363.32 1820.23,-369.6"/>
+<text text-anchor="start" x="1681" y="-401" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#8a8a8a">Flucht gelingt</text>
+</g>
+
+<g id="edge17" class="edge">
+<title>SIEG&#45;&gt;ORT</title>
+<path fill="none" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5,2" d="M1855.94,-527.53C1792.7,-508.2 1706.93,-471.5 1743,-421.5 1761.12,-396.39 1790.66,-382.07 1820.24,-373.97"/>
+<polygon fill="#8a8a8a" stroke="#8a8a8a" stroke-width="2" points="1821.04,-377.01 1828.99,-371.74 1819.49,-370.91 1821.04,-377.01"/>
+<text text-anchor="start" x="1717" y="-427.5" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="15.00" fill="#8a8a8a">Enter</text>
+</g>
+</g>
+</svg>
+
+    <div class="legend" aria-label="Legende">
+      <span><i class="sw" style="border-color:#1F4E8C"></i>Eingabe → nächster Bildschirm</span>
+      <span><i class="sw" style="border-color:#1E7B45"></i>Erfolg / Sieg</span>
+      <span><i class="sw" style="border-color:#B03030"></i>Niederlage / Ende</span>
+      <span><i class="sw" style="border-color:#8A8A8A;border-top-style:dashed"></i>zurück</span>
+      <span>↩ Zurück → Hauptmenü: „Zurück“ führt immer ins Hauptmenü</span>
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="ttl">
+  <div class="win" id="win">
+    <div class="bar">
+      <div class="dots"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+      <span class="ttl" id="ttl"></span><span class="chip" id="chip"></span>
+      <button class="x" id="close" title="Schließen (Esc)" aria-label="Schließen">×</button>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <pre class="term" id="term"></pre>
+    <div class="foot">
+      <div class="note" id="note"></div>
+      <div class="next" id="next"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SCREENS = {"START": {"title": "Das vergessene Königreich", "area": "start", "note": "Programmstart: Name eingeben, dann Intro.", "areaName": "Start & Hauptmenü", "color": "#4C5D80", "fill": "#E6ECF5", "variants": [{"name": "Start & Intro", "lines": ["==========================================", "  DAS VERGESSENE KÖNIGREICH", "==========================================", "Name deines Helden: {{Lucas}}", "", "Du bist ein Reisender im vergessenen Königreich. Man erzählt sich,", "ein Skelett in der Dunklen Höhle trage den alten Schlüssel zum", "Schloss – dort wartet der Dunkle Ritter.", "", "Weiter mit Enter..."], "next": null}], "next": [["Name + Enter, Enter", "MENU"]]}, "MENU": {"title": "Hauptmenü", "area": "start", "note": "Ungültige Eingabe (Text, 0, zu große Zahl): das Menü wird einfach neu angezeigt.", "areaName": "Start & Hauptmenü", "color": "#4C5D80", "fill": "#E6ECF5", "variants": [{"name": "Hauptmenü", "lines": ["==========================================", "  HAUPTMENÜ", "==========================================", "Lucas | Level 1 | HP 100/100 | Angriff 13 | Verteidigung 7 | Gold 50", "", "1. Orte erkunden", "2. Inventar", "3. Quests", "4. Beenden", "Auswahl: {{_}}"], "next": null}], "next": [["1", "ORTE"], ["2", "INVENTAR"], ["3", "QUESTS"], ["4", "ENDE"]]}, "ORTE": {"title": "Wohin gehst du?", "area": "orte", "note": "Das Alte Schloss öffnet sich nur mit dem „Alten Schlüssel“ im Inventar.", "areaName": "Orte erkunden", "color": "#357046", "fill": "#E5F2E8", "variants": [{"name": "Ort wählen", "lines": ["==========================================", "  WOHIN GEHST DU?", "==========================================", "1. Verwunschener Wald", "2. Eldenruh", "3. Dunkle Höhle", "4. Altes Schloss", "5. Zurück", "Auswahl: {{_}}"], "next": null}, {"name": "Schloss verschlossen", "lines": ["==========================================", "  WOHIN GEHST DU?", "==========================================", "1. Verwunschener Wald", "2. Eldenruh", "3. Dunkle Höhle", "4. Altes Schloss", "5. Zurück", "Auswahl: {{4}}", "Das Tor ist verschlossen. Du brauchst: Alter Schlüssel.", "", "Weiter mit Enter..."], "next": [["Enter", "MENU"]]}], "next": [["1", "WALD"], ["2", "STADT"], ["3", "HOEHLE"], ["4 (mit Schlüssel)", "SCHLOSS"], ["5 Zurück", "MENU"]]}, "WALD": {"title": "Verwunschener Wald", "area": "orte", "note": "Zufall: Goblin oder Wolf. „2. Zurück“ führt ins Hauptmenü.", "areaName": "Orte erkunden", "color": "#357046", "fill": "#E5F2E8", "variants": [{"name": "Goblin", "lines": ["==========================================", "  VERWUNSCHENER WALD", "==========================================", "Ein dichter Wald voller wilder Kreaturen.", "Lucas | Level 1 | HP 100/100 | Angriff 13 | Verteidigung 7 | Gold 50", "", "1. Nach Gegnern suchen", "2. Zurück", "Auswahl: {{1}}", "Ein Goblin greift an!", "", "Weiter mit Enter..."], "next": null}, {"name": "Wolf", "lines": ["==========================================", "  VERWUNSCHENER WALD", "==========================================", "Ein dichter Wald voller wilder Kreaturen.", "Lucas | Level 1 | HP 100/100 | Angriff 13 | Verteidigung 7 | Gold 50", "", "1. Nach Gegnern suchen", "2. Zurück", "Auswahl: {{1}}", "Ein Wolf greift an!", "", "Weiter mit Enter..."], "next": null}], "next": [["1 + Enter", "KAMPF"], ["2 Zurück", "MENU"]]}, "HOEHLE": {"title": "Dunkle Höhle", "area": "orte", "note": "Zufall: Bandit oder Skelett. Das Skelett lässt den Alten Schlüssel fallen.", "areaName": "Orte erkunden", "color": "#357046", "fill": "#E5F2E8", "variants": [{"name": "Bandit", "lines": ["==========================================", "  DUNKLE HÖHLE", "==========================================", "Banditen und Skelette hausen hier. Ein Skelett soll einen alten Schlüssel tragen.", "Lucas | Level 2 | HP 120/120 | Angriff 21 | Verteidigung 9 | Gold 140", "", "1. Nach Gegnern suchen", "2. Zurück", "Auswahl: {{1}}", "Ein Bandit greift an!", "", "Weiter mit Enter..."], "next": null}, {"name": "Skelett", "lines": ["==========================================", "  DUNKLE HÖHLE", "==========================================", "Banditen und Skelette hausen hier. Ein Skelett soll einen alten Schlüssel tragen.", "Lucas | Level 2 | HP 120/120 | Angriff 21 | Verteidigung 9 | Gold 140", "", "1. Nach Gegnern suchen", "2. Zurück", "Auswahl: {{1}}", "Ein Skelett greift an!", "", "Weiter mit Enter..."], "next": null}], "next": [["1 + Enter", "KAMPF"], ["2 Zurück", "MENU"]]}, "SCHLOSS": {"title": "Altes Schloss", "area": "orte", "note": "Nur mit Schlüssel erreichbar. Zufall: Skelett oder Dunkler Ritter (Endgegner).", "areaName": "Orte erkunden", "color": "#357046", "fill": "#E5F2E8", "variants": [{"name": "Skelett", "lines": ["==========================================", "  ALTES SCHLOSS", "==========================================", "Die Ruine des vergessenen Königreichs. Hier wartet der Dunkle Ritter.", "Lucas | Level 5 | HP 180/180 | Angriff 30 | Verteidigung 19 | Gold 520", "", "1. Nach Gegnern suchen", "2. Zurück", "Auswahl: {{1}}", "Ein Skelett greift an!", "", "Weiter mit Enter..."], "next": null}, {"name": "Dunkler Ritter", "lines": ["==========================================", "  ALTES SCHLOSS", "==========================================", "Die Ruine des vergessenen Königreichs. Hier wartet der Dunkle Ritter.", "Lucas | Level 5 | HP 180/180 | Angriff 30 | Verteidigung 19 | Gold 520", "", "1. Nach Gegnern suchen", "2. Zurück", "Auswahl: {{1}}", "Ein Dunkler Ritter greift an!", "", "Weiter mit Enter..."], "next": null}], "next": [["1 + Enter", "KAMPF"], ["2 Zurück", "MENU"]]}, "STADT": {"title": "Eldenruh", "area": "stadt", "note": "Die Taverne heilt kostenlos auf volle HP.", "areaName": "Stadt Eldenruh", "color": "#94700F", "fill": "#FFF2D6", "variants": [{"name": "Stadtmenü", "lines": ["==========================================", "  ELDENRUH", "==========================================", "Eine sichere Handelsstadt mit Laden und Taverne.", "Lucas | Level 2 | HP 65/120 | Angriff 21 | Verteidigung 9 | Gold 90", "", "1. Laden", "2. Taverne (kostenlos ausruhen)", "3. Zurück", "Auswahl: {{_}}"], "next": null}, {"name": "Taverne", "lines": ["==========================================", "  ELDENRUH", "==========================================", "Eine sichere Handelsstadt mit Laden und Taverne.", "Lucas | Level 2 | HP 65/120 | Angriff 21 | Verteidigung 9 | Gold 90", "", "1. Laden", "2. Taverne (kostenlos ausruhen)", "3. Zurück", "Auswahl: {{2}}", "Du schläfst gut und heilst 55 HP.", "", "Weiter mit Enter..."], "next": [["Enter", "STADT"]]}], "next": [["1 Laden", "LADEN"], ["2 Taverne", "STADT"], ["3 Zurück", "MENU"]]}, "LADEN": {"title": "Laden", "area": "stadt", "note": "Gekaufte Items landen als neues Exemplar im Inventar.", "areaName": "Stadt Eldenruh", "color": "#94700F", "fill": "#FFF2D6", "variants": [{"name": "Kauf", "lines": ["==========================================", "  LADEN – DEIN GOLD: 90", "==========================================", "1. Heiltrank (Heilt 30 HP.) – 20 Gold", "2. Eisenschwert (Eine robuste Waffe.) – 80 Gold", "3. Kettenrüstung (Starker Schutz.) – 70 Gold", "4. Zurück", "Auswahl: {{2}}", "Gekauft: Eisenschwert", "", "Weiter mit Enter..."], "next": null}, {"name": "Zu wenig Gold", "lines": ["==========================================", "  LADEN – DEIN GOLD: 10", "==========================================", "1. Heiltrank (Heilt 30 HP.) – 20 Gold", "2. Eisenschwert (Eine robuste Waffe.) – 80 Gold", "3. Kettenrüstung (Starker Schutz.) – 70 Gold", "4. Zurück", "Auswahl: {{3}}", "Nicht genug Gold.", "", "Weiter mit Enter..."], "next": null}], "next": [["Enter", "STADT"], ["4 Zurück", "STADT"]]}, "KAMPF": {"title": "Kampf", "area": "kampf", "note": "Schaden = Angriff − Verteidigung (mindestens 1). Flucht gelingt zu 50 %.", "areaName": "Kampf", "color": "#9A4129", "fill": "#FBE7E1", "variants": [{"name": "Angreifen", "lines": ["==========================================", "  KAMPF", "==========================================", "Lucas: 100/100 HP", "Goblin: 40/40 HP", "", "1. Angreifen", "2. Heiltrank trinken", "3. Fliehen", "Auswahl: {{1}}", "Du verursachst 11 Schaden.", "Goblin verursacht 2 Schaden.", "", "Weiter mit Enter..."], "next": null}, {"name": "Heiltrank", "lines": ["==========================================", "  KAMPF", "==========================================", "Lucas: 62/100 HP", "Wolf: 33/55 HP", "", "1. Angreifen", "2. Heiltrank trinken", "3. Fliehen", "Auswahl: {{2}}", "Du heilst 30 HP.", "Wolf verursacht 5 Schaden.", "", "Weiter mit Enter..."], "next": null}, {"name": "Kein Heiltrank", "lines": ["==========================================", "  KAMPF", "==========================================", "Lucas: 41/100 HP", "Bandit: 70/70 HP", "", "1. Angreifen", "2. Heiltrank trinken", "3. Fliehen", "Auswahl: {{2}}", "Du hast keinen Heiltrank.", "", "Weiter mit Enter..."], "next": [["Enter (Runde wiederholen)", "KAMPF"]]}, {"name": "Flucht misslingt", "lines": ["==========================================", "  KAMPF", "==========================================", "Lucas: 41/100 HP", "Bandit: 70/70 HP", "", "1. Angreifen", "2. Heiltrank trinken", "3. Fliehen", "Auswahl: {{3}}", "Die Flucht misslingt!", "Bandit verursacht 8 Schaden.", "", "Weiter mit Enter..."], "next": [["Enter (nächste Runde)", "KAMPF"]]}, {"name": "Flucht gelingt", "lines": ["==========================================", "  KAMPF", "==========================================", "Lucas: 33/100 HP", "Bandit: 70/70 HP", "", "1. Angreifen", "2. Heiltrank trinken", "3. Fliehen", "Auswahl: {{3}}", "Du bist entkommen.", "", "Weiter mit Enter..."], "next": [["Enter → zurück zum Ort", "HOEHLE"]]}], "next": [["Enter (nächste Runde)", "KAMPF"], ["Gegner-HP = 0", "SIEG"], ["eigene HP = 0", "BESIEGT"], ["3 Flucht gelingt", "WALD"]]}, "SIEG": {"title": "Sieg!", "area": "kampf", "note": "Nach Enter geht es zurück zum Ort des Kampfes – auch nach dem Dunklen Ritter: Das Spiel läuft weiter.", "areaName": "Kampf", "color": "#9A4129", "fill": "#FBE7E1", "variants": [{"name": "Normal", "lines": ["==========================================", "  SIEG!", "==========================================", "Wolf besiegt: +55 XP, +12 Gold", "", "Weiter mit Enter..."], "next": null}, {"name": "Quest + Level-Up", "lines": ["==========================================", "  SIEG!", "==========================================", "Goblin besiegt: +40 XP, +10 Gold", "Beute: Heiltrank", "[[Quest erfüllt: Goblin-Jäger (+100 XP, +50 Gold)]]", "[[LEVEL UP! Du bist jetzt Level 2.]]", "", "Weiter mit Enter..."], "next": null}, {"name": "Schlüssel", "lines": ["==========================================", "  SIEG!", "==========================================", "Skelett besiegt: +100 XP, +30 Gold", "[[Beute: Alter Schlüssel]]", "[[LEVEL UP! Du bist jetzt Level 3.]]", "", "Weiter mit Enter..."], "next": [["Enter → zurück zum Ort", "HOEHLE"], ["Schloss jetzt offen", "SCHLOSS"]]}, {"name": "Dunkler Ritter", "lines": ["==========================================", "  SIEG!", "==========================================", "Dunkler Ritter besiegt: +300 XP, +150 Gold", "[[Quest erfüllt: Das Ende der Dunkelheit (+0 XP, +200 Gold)]]", "[[LEVEL UP! Du bist jetzt Level 6.]]", "Der Dunkle Ritter ist gefallen! Die Sonne erhebt sich über dem", "Königreich. Du hast das Spiel gewonnen.", "", "Weiter mit Enter..."], "next": [["Enter → zurück zum Ort", "SCHLOSS"]]}], "next": [["Enter → zurück zum Ort", "WALD"]]}, "BESIEGT": {"title": "Besiegt", "area": "kampf", "note": "Keine Spielende-Niederlage: Lucas wacht mit halben HP wieder auf.", "areaName": "Kampf", "color": "#9A4129", "fill": "#FBE7E1", "variants": [{"name": "Niederlage", "lines": ["==========================================", "  BESIEGT", "==========================================", "Du wachst später mit 50 HP wieder auf.", "", "Weiter mit Enter..."], "next": null}], "next": [["Enter → zurück zum Ort", "WALD"]]}, "INVENTAR": {"title": "Inventar", "area": "char", "note": "Ausgerüstete Waffe/Rüstung erhöhen Angriff bzw. Verteidigung.", "areaName": "Inventar & Quests", "color": "#5E4393", "fill": "#EFE7F8", "variants": [{"name": "Ausrüsten", "lines": ["==========================================", "  INVENTAR – ITEM ZUM AUSRÜSTEN WÄHLEN", "==========================================", "1. Heiltrank (Heiltrank, Stärke 30)", "2. Dolch (Waffe, Stärke 3) [ausgerüstet]", "3. Lederrüstung (Rüstung, Stärke 2) [ausgerüstet]", "4. Eisenschwert (Waffe, Stärke 8)", "5. Zurück", "Auswahl: {{4}}", "Eisenschwert ausgerüstet.", "", "Weiter mit Enter..."], "next": null}, {"name": "Nicht ausrüstbar", "lines": ["==========================================", "  INVENTAR – ITEM ZUM AUSRÜSTEN WÄHLEN", "==========================================", "1. Heiltrank (Heiltrank, Stärke 30)", "2. Dolch (Waffe, Stärke 3) [ausgerüstet]", "3. Lederrüstung (Rüstung, Stärke 2) [ausgerüstet]", "4. Zurück", "Auswahl: {{1}}", "Das kann man nicht ausrüsten.", "", "Weiter mit Enter..."], "next": null}], "next": [["Enter", "MENU"]]}, "QUESTS": {"title": "Quests", "area": "char", "note": "Erfüllte Quests zahlen ihre Belohnung automatisch beim entscheidenden Sieg aus.", "areaName": "Inventar & Quests", "color": "#5E4393", "fill": "#EFE7F8", "variants": [{"name": "Questliste", "lines": ["==========================================", "  QUESTS", "==========================================", "Goblin-Jäger: Besiege 3 Goblins. [2/3] – 100 XP, 50 Gold", "Banditenplage: Besiege 2 Banditen. [0/2] – 150 XP, 80 Gold", "Das Ende der Dunkelheit: Besiege den Dunklen Ritter. [0/1] – 0 XP, 200 Gold", "", "Weiter mit Enter..."], "next": null}], "next": [["Enter", "MENU"]]}, "ENDE": {"title": "Programmende", "area": "ende", "note": "„4. Beenden“ im Hauptmenü beendet das Programm regulär (Exit-Code 0).", "areaName": "Ende", "color": "#555555", "fill": "#ECECEC", "variants": [{"name": "Konsole", "lines": ["C:\\...\\RPGGame\\bin\\Debug\\net10.0\\RPGGame.exe (process 21612)", "exited with code 0 (0x0).", "Press any key to close this window . . ."], "next": null}], "next": []}};
+const ORDER = ["START","MENU","ORTE","WALD","HOEHLE","SCHLOSS","KAMPF","SIEG","BESIEGT","STADT","LADEN","INVENTAR","QUESTS","ENDE"];
+const $ = id => document.getElementById(id);
+let cur = null, vIdx = 0;
+
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function fmt(line) {
+  return esc(line)
+    .replace(/\{\{_\}\}/g, '<span class="cur"></span>')
+    .replace(/\{\{(.*?)\}\}/g, '<span class="in">$1</span>')
+    .replace(/\[\[(.*?)\]\]/g, '<span class="ok">$1</span>');
+}
+
+function render() {
+  const s = SCREENS[cur], v = s.variants[vIdx];
+  $("ttl").textContent = "RPGGame.exe — " + s.title.toUpperCase();
+  $("chip").textContent = s.areaName; $("chip").style.background = s.fill;
+  // Varianten-Reiter
+  const tabs = $("tabs"); tabs.innerHTML = "";
+  if (s.variants.length > 1) {
+    s.variants.forEach((vv, i) => {
+      const b = document.createElement("button");
+      b.className = "tab" + (i === vIdx ? " on" : ""); b.textContent = vv.name;
+      b.onclick = () => { vIdx = i; render(); };
+      tabs.appendChild(b);
+    });
+    tabs.insertAdjacentHTML("beforeend", '<span class="hint">← → Variante wechseln</span>');
+    tabs.style.display = "flex";
+  } else tabs.style.display = "none";
+  // Terminal-Zeilen nacheinander einblenden
+  $("term").innerHTML = v.lines.map((l, i) =>
+    `<div class="ln" style="animation-delay:${i * 28}ms">${fmt(l) || " "}</div>`).join("");
+  $("term").scrollTop = 0;
+  $("note").textContent = "💡 " + s.note;
+  // Weiter-Schritte
+  const steps = v.next || s.next, nx = $("next"); nx.innerHTML = "";
+  if (steps.length) nx.insertAdjacentHTML("beforeend", "<b>Weiter:</b>");
+  else nx.insertAdjacentHTML("beforeend", "<b>Ende des Programms.</b>");
+  steps.forEach(([label, to]) => {
+    const b = document.createElement("button"); b.className = "go";
+    b.innerHTML = `<kbd>${esc(label)}</kbd><span>→</span><span class="to">${esc(SCREENS[to].title)}</span>`;
+    b.onclick = () => openScreen(to);
+    nx.appendChild(b);
+  });
+  highlight(cur, steps.map(s => s[1]));
+}
+
+function highlight(id, targets) {
+  document.querySelectorAll("#map g.node").forEach(n => {
+    n.classList.toggle("current", n.id === id);
+    n.classList.toggle("target", targets.includes(n.id));
+  });
+  document.querySelectorAll("#map g.edge").forEach(e => {
+    const t = e.querySelector("title")?.textContent || "";
+    e.classList.toggle("out", t.startsWith(id + "->") || t.startsWith(id + "&#45;>"));
+  });
+}
+
+function openScreen(id, variant = 0) {
+  if (!SCREENS[id]) return;
+  const same = cur === id;
+  cur = id; vIdx = variant;
+  document.body.classList.add("open");
+  if (!same) { const w = $("win"); w.style.animation = "none"; w.offsetHeight; w.style.animation = ""; }
+  render();
+  try { history.replaceState(null, "", "#" + id.toLowerCase()); } catch (_) {}
+  $("close").focus({ preventScroll: true });
+}
+function closeScreen() {
+  document.body.classList.remove("open"); cur = null;
+  document.querySelectorAll("#map g.node, #map g.edge").forEach(n => n.classList.remove("current", "target", "out"));
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (_) {}
+}
+
+// Klicks auf die Karte
+document.querySelectorAll("#map g.node").forEach(n => {
+  if (!SCREENS[n.id]) return;
+  n.setAttribute("tabindex", "0"); n.setAttribute("role", "button");
+  n.setAttribute("aria-label", SCREENS[n.id].title);
+  n.addEventListener("click", () => openScreen(n.id));
+  n.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openScreen(n.id); } });
+});
+$("close").onclick = closeScreen;
+$("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeScreen(); });
+$("tour").onclick = () => openScreen("START");
+
+document.addEventListener("keydown", e => {
+  if (!cur) return;
+  const s = SCREENS[cur];
+  if (e.key === "Escape") closeScreen();
+  else if (e.key === "ArrowRight" && s.variants.length > 1) { vIdx = (vIdx + 1) % s.variants.length; render(); }
+  else if (e.key === "ArrowLeft" && s.variants.length > 1) { vIdx = (vIdx - 1 + s.variants.length) % s.variants.length; render(); }
+  else if (e.key === "ArrowDown" || e.key === "PageDown") { e.preventDefault(); openScreen(ORDER[(ORDER.indexOf(cur) + 1) % ORDER.length]); }
+  else if (e.key === "ArrowUp" || e.key === "PageUp") { e.preventDefault(); openScreen(ORDER[(ORDER.indexOf(cur) - 1 + ORDER.length) % ORDER.length]); }
+});
+
+function fromHash() {
+  const id = (location.hash || "").slice(1).toUpperCase();
+  if (SCREENS[id]) openScreen(id); else if (cur) closeScreen();
+}
+window.addEventListener("hashchange", fromHash);
+fromHash();
+</script>
+</body>
+</html>
